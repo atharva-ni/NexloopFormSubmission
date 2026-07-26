@@ -997,15 +997,8 @@ export default function App() {
             </div>
           )}
 
-          {/* Navigation Controls Footer - Plain Inline Flex Styles with explicit gap */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            marginTop: '32px',
-            marginBottom: '40px'
-          }}>
+          {/* Navigation Controls Footer - Responsive CSS styled layout */}
+          <div className="gf-footer-nav">
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               {currentSection > 1 && (
                 <button
