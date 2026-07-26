@@ -100,9 +100,16 @@ function saveFilesToFolder(filesArray, folder) {
   if (!filesArray || !Array.isArray(filesArray)) return;
   filesArray.forEach(function(fileObj) {
     if (fileObj.base64) {
-      const parts = fileObj.base64.split(",");
-      const contentType = parts[0].split(";")[0].replace("data:", "");
-      const decodedData = Utilities.base64Decode(parts[1]);
+      let base64String = fileObj.base64;
+      let contentType = "application/octet-stream";
+      
+      if (base64String.indexOf(",") !== -1) {
+        const parts = base64String.split(",");
+        contentType = parts[0].split(";")[0].replace("data:", "");
+        base64String = parts[1];
+      }
+      
+      const decodedData = Utilities.base64Decode(base64String);
       const blob = Utilities.newBlob(decodedData, contentType, fileObj.name);
       folder.createFile(blob);
     }
