@@ -23,6 +23,43 @@ function testDriveAppPermission() {
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
+    
+    // Check if it's a single file upload action
+    if (data.action === "uploadFile") {
+      const fileObj = data.file;
+      if (!fileObj || !fileObj.base64) {
+        throw new Error("No file content provided for uploadFile action");
+      }
+      
+      let parentFolder;
+      if (PARENT_FOLDER_ID && PARENT_FOLDER_ID !== "YOUR_PARENT_FOLDER_ID_HERE") {
+        parentFolder = DriveApp.getFolderById(PARENT_FOLDER_ID);
+      } else {
+        parentFolder = DriveApp.getRootFolder();
+      }
+      
+      // Get or create a Temp Uploads folder to keep things tidy
+      let tempFolder;
+      const tempFolderName = "NexLoop_Temp_Uploads";
+      const folders = parentFolder.getFoldersByName(tempFolderName);
+      if (folders.hasNext()) {
+        tempFolder = folders.next();
+      } else {
+        tempFolder = parentFolder.createFolder(tempFolderName);
+      }
+      
+      // Save file to temp folder
+      const savedFile = saveSingleBase64File(fileObj, tempFolder);
+      
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        fileId: savedFile.getId(),
+        fileUrl: savedFile.getUrl(),
+        name: fileObj.name
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Default action: full form submission
     const companyName = data.basicInfo?.companyName || "Unnamed_Company";
     const contactPerson = data.basicInfo?.contactPerson || "Client";
     const timestamp = Utilities.formatDate(new Date(), "GMT+5:30", "yyyy-MM-dd_HH-mm");
@@ -96,35 +133,127 @@ function doPost(e) {
   }
 }
 
+function saveSingleBase64File(fileObj, folder) {
+  let base64String = fileObj.base64;
+  let contentType = "application/octet-stream";
+  
+  // Extract MIME type if data URL header is present
+  if (base64String.indexOf(",") !== -1) {
+    const parts = base64String.split(",");
+    const headerMime = parts[0].split(";")[0].replace("data:", "");
+    if (headerMime) contentType = headerMime;
+    base64String = parts[1];
+  }
+  
+  // Comprehensive mapping by file extension
+  const fileName = fileObj.name || "file";
+  const ext = fileName.split('.').pop().toLowerCase();
+  
+  const mimeTypes = {
+    // Images
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'jpe': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'svg': 'image/svg+xml',
+    'bmp': 'image/bmp',
+    'tiff': 'image/tiff',
+    'tif': 'image/tiff',
+    'ico': 'image/x-icon',
+    'heic': 'image/heic',
+    'heif': 'image/heif',
+    
+    // Documents
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'rtf': 'application/rtf',
+    'txt': 'text/plain',
+    'csv': 'text/csv',
+    'odt': 'application/vnd.oasis.opendocument.text',
+    
+    // Spreadsheets
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+    
+    // Presentations
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'odp': 'application/vnd.oasis.opendocument.presentation',
+    
+    // Videos
+    'mp4': 'video/mp4',
+    'mov': 'video/quicktime',
+    'webm': 'video/webm',
+    'avi': 'video/x-msvideo',
+    'mkv': 'video/x-matroska',
+    'wmv': 'video/x-ms-wmv',
+    'flv': 'video/x-flv',
+    'mpeg': 'video/mpeg',
+    'mpg': 'video/mpeg',
+    
+    // Audio
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'm4a': 'audio/mp4',
+    'ogg': 'audio/ogg',
+    'aac': 'audio/aac',
+    
+    // Archives
+    'zip': 'application/zip',
+    'rar': 'application/vnd.rar',
+    '7z': 'application/x-7z-compressed',
+    'tar': 'application/x-tar',
+    'gz': 'application/gzip',
+    
+    // CAD / 3D / Design
+    'dwg': 'image/vnd.dwg',
+    'dxf': 'image/vnd.dxf',
+    'rvt': 'application/octet-stream', // Autodesk Revit
+    'rfa': 'application/octet-stream',
+    'skp': 'application/octet-stream', // SketchUp
+    'obj': 'model/obj',
+    'fbx': 'application/octet-stream',
+    '3ds': 'application/x-3ds',
+    'max': 'application/x-3ds',
+    'psd': 'image/vnd.adobe.photoshop',
+    'ai': 'application/postscript',
+    'indd': 'application/x-indesign',
+    'fig': 'application/x-figma'
+  };
+  
+  if (mimeTypes.hasOwnProperty(ext)) {
+    contentType = mimeTypes[ext];
+  }
+  
+  const bytes = Utilities.base64Decode(base64String);
+  const blob = Utilities.newBlob(bytes, contentType, fileName);
+  return folder.createFile(blob);
+}
+
 function saveFilesToFolder(filesArray, folder) {
   if (!filesArray || !Array.isArray(filesArray)) return;
   filesArray.forEach(function(fileObj) {
-    if (fileObj && fileObj.base64) {
-      let base64String = fileObj.base64;
-      let contentType = "application/octet-stream";
-      
-      // Extract MIME type if data URL header is present
-      if (base64String.indexOf(",") !== -1) {
-        const parts = base64String.split(",");
-        const headerMime = parts[0].split(";")[0].replace("data:", "");
-        if (headerMime) contentType = headerMime;
-        base64String = parts[1];
+    if (fileObj) {
+      // 1. If the file is already uploaded to Drive, move it to the subfolder!
+      if (fileObj.driveFileId) {
+        try {
+          const file = DriveApp.getFileById(fileObj.driveFileId);
+          file.moveTo(folder);
+          return;
+        } catch (e) {
+          Logger.log("Failed to move file " + fileObj.driveFileId + ": " + e.toString());
+          // Fall through to base64 upload if it failed to move
+        }
       }
       
-      // Fallback MIME types by file extension
-      const fileName = fileObj.name || "file";
-      const ext = fileName.split('.').pop().toLowerCase();
-      if (ext === 'mp4') contentType = 'video/mp4';
-      else if (ext === 'mov') contentType = 'video/quicktime';
-      else if (ext === 'webm') contentType = 'video/webm';
-      else if (ext === 'png') contentType = 'image/png';
-      else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
-      else if (ext === 'svg') contentType = 'image/svg+xml';
-      else if (ext === 'pdf') contentType = 'application/pdf';
-      
-      const bytes = Utilities.base64Decode(base64String);
-      const blob = Utilities.newBlob(bytes, contentType, fileName);
-      folder.createFile(blob);
+      // 2. Fallback to base64 decoding if the file has not been uploaded to Drive yet
+      if (fileObj.base64) {
+        saveSingleBase64File(fileObj, folder);
+      }
     }
   });
 }

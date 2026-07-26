@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { CheckCircle2, Eye, Send, RotateCcw, ChevronLeft, ChevronRight, HardDrive, ExternalLink, Settings } from 'lucide-react';
+import { CheckCircle2, Eye, Send, RotateCcw, ChevronLeft, ChevronRight, HardDrive, ExternalLink, Loader2 } from 'lucide-react';
 
 import { Header } from './components/Header';
 import { ProjectSection } from './components/ProjectSection';
@@ -12,11 +12,9 @@ const SECTIONS = [
   { id: 2, title: '2. About Company' },
   { id: 3, title: '3. Website Reqs' },
   { id: 4, title: '4. Featured Projects' },
-  { id: 5, title: '5. Team' },
-  { id: 6, title: '6. Branding' },
-  { id: 7, title: '7. Assets' },
-  { id: 8, title: '8. Contact' },
-  { id: 9, title: '9. Anything Else?' }
+  { id: 5, title: '5. Team & Founder' },
+  { id: 6, title: '6. Branding & Assets' },
+  { id: 7, title: '7. Contact & Notes' }
 ];
 
 const SERVICE_OPTIONS = [
@@ -141,6 +139,9 @@ const INITIAL_STATE = {
   ],
   team: {
     founderName: '',
+    founderDesignation: '',
+    founderBio: '',
+    founderPhoto: [],
     teamMembers: ''
   },
   branding: {
@@ -163,68 +164,125 @@ const INITIAL_STATE = {
   anythingElse: ''
 };
 
+// Helper to strip heavy base64 strings so LocalStorage 5MB quota is NEVER exceeded
+const prepareDraftForStorage = (data) => {
+  try {
+    const clone = JSON.parse(JSON.stringify(data));
+    const cleanFiles = (fileArray) => {
+      if (!Array.isArray(fileArray)) return [];
+      return fileArray.map(f => ({
+        id: f.id,
+        name: f.name,
+        size: f.size,
+        type: f.type
+      }));
+    };
+
+    if (clone.branding) {
+      clone.branding.logo = cleanFiles(clone.branding.logo);
+      clone.branding.profilePdf = cleanFiles(clone.branding.profilePdf);
+      clone.branding.brochurePdf = cleanFiles(clone.branding.brochurePdf);
+    }
+    if (clone.assets) {
+      clone.assets.files = cleanFiles(clone.assets.files);
+    }
+    if (clone.team) {
+      clone.team.founderPhoto = cleanFiles(clone.team.founderPhoto);
+    }
+    if (Array.isArray(clone.projects)) {
+      clone.projects.forEach(p => {
+        if (p.photos) p.photos = cleanFiles(p.photos);
+      });
+    }
+    return clone;
+  } catch (e) {
+    return data;
+  }
+};
+
 export default function App() {
   const [currentSection, setCurrentSection] = useState(() => {
     const savedSec = localStorage.getItem('nexloop_current_section');
-    return savedSec ? parseInt(savedSec, 10) : 1;
+    return savedSec ? Math.min(7, parseInt(savedSec, 10)) : 1;
   });
 
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('nexloop_form_draft');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { return INITIAL_STATE; }
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...INITIAL_STATE, ...parsed };
+      } catch (e) {
+        return INITIAL_STATE;
+      }
     }
     return INITIAL_STATE;
   });
 
-  // Automatically load from .env.local (VITE_GOOGLE_DRIVE_WEBHOOK_URL) or LocalStorage
-  const [driveWebhookUrl, setDriveWebhookUrl] = useState(() => {
-    return (
-      import.meta.env.VITE_GOOGLE_DRIVE_WEBHOOK_URL ||
-      localStorage.getItem('nexloop_drive_webhook_url') ||
-      ''
-    );
-  });
+  const driveWebhookUrl = import.meta.env.VITE_GOOGLE_DRIVE_WEBHOOK_URL || localStorage.getItem('nexloop_drive_webhook_url') || '';
 
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [createdDriveFolderUrl, setCreatedDriveFolderUrl] = useState(null);
+  const [submitProgress, setSubmitProgress] = useState(0);
+  const [submitStepText, setSubmitStepText] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(() => {
+    try {
+      return localStorage.getItem('nexloop_form_submitted') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+  const [createdDriveFolderUrl, setCreatedDriveFolderUrl] = useState(() => {
+    try {
+      return localStorage.getItem('nexloop_created_drive_folder_url') || null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [copied, setCopied] = useState(false);
-  const [showDriveConfig, setShowDriveConfig] = useState(false);
 
-  // Auto-save form data state on every single change
+  // Safe Auto-save form data state on every change without LocalStorage quota crashes
   useEffect(() => {
-    localStorage.setItem('nexloop_form_draft', JSON.stringify(formData));
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLastSavedTime(now);
+    try {
+      const storageDraft = prepareDraftForStorage(formData);
+      localStorage.setItem('nexloop_form_draft', JSON.stringify(storageDraft));
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(now);
+    } catch (err) {
+      console.warn('LocalStorage save skipped:', err);
+    }
   }, [formData]);
 
-  // Persist current active section step
+  // Persist current active section step safely
   useEffect(() => {
-    localStorage.setItem('nexloop_current_section', currentSection.toString());
+    try {
+      localStorage.setItem('nexloop_current_section', currentSection.toString());
+    } catch (e) {}
   }, [currentSection]);
 
-  useEffect(() => {
-    if (driveWebhookUrl) {
-      localStorage.setItem('nexloop_drive_webhook_url', driveWebhookUrl);
-    }
-  }, [driveWebhookUrl]);
-
   const handleManualSave = () => {
-    localStorage.setItem('nexloop_form_draft', JSON.stringify(formData));
-    localStorage.setItem('nexloop_current_section', currentSection.toString());
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLastSavedTime(now);
-    alert('Form state saved successfully!');
+    try {
+      const storageDraft = prepareDraftForStorage(formData);
+      localStorage.setItem('nexloop_form_draft', JSON.stringify(storageDraft));
+      localStorage.setItem('nexloop_current_section', currentSection.toString());
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(now);
+      alert('Form draft saved successfully!');
+    } catch (e) {
+      alert('Form state saved!');
+    }
   };
 
   const handleResetDraft = () => {
     if (window.confirm('Are you sure you want to clear all form entries and reset state?')) {
       setFormData(INITIAL_STATE);
-      localStorage.removeItem('nexloop_form_draft');
-      localStorage.removeItem('nexloop_current_section');
+      try {
+        localStorage.removeItem('nexloop_form_draft');
+        localStorage.removeItem('nexloop_current_section');
+        localStorage.removeItem('nexloop_form_submitted');
+        localStorage.removeItem('nexloop_created_drive_folder_url');
+      } catch (e) {}
       setCurrentSection(1);
       setIsSubmitted(false);
       setCreatedDriveFolderUrl(null);
@@ -257,44 +315,151 @@ export default function App() {
     });
   };
 
+  // Dynamic calculation across 10 key field checkpoints
   const calculateCompletion = () => {
-    let filled = 0;
-    let total = 10;
-    if (formData.basicInfo.companyName) filled++;
-    if (formData.basicInfo.contactPerson) filled++;
-    if (formData.basicInfo.mobileNumber) filled++;
-    if (formData.basicInfo.email) filled++;
-    if (formData.aboutCompany.description) filled++;
-    if (formData.aboutCompany.services.length > 0) filled++;
-    if (formData.websiteReqs.pages.length > 0) filled++;
-    if (formData.projects.length > 0 && formData.projects[0].name) filled++;
-    if (formData.contactDetails.phone || formData.contactDetails.email) filled++;
-    if (formData.team.founderName || formData.branding.logo.length > 0) filled++;
-    return Math.min(100, Math.round((filled / total) * 100));
+    let score = 0;
+    if (formData.basicInfo.companyName?.trim()) score += 10;
+    if (formData.basicInfo.contactPerson?.trim()) score += 10;
+    if (formData.basicInfo.mobileNumber?.trim()) score += 10;
+    if (formData.basicInfo.email?.trim()) score += 10;
+    if (formData.aboutCompany.description?.trim()) score += 15;
+    if (formData.aboutCompany.services && formData.aboutCompany.services.length > 0) score += 15;
+    if (formData.websiteReqs.pages && formData.websiteReqs.pages.length > 0) score += 10;
+    if (formData.projects && formData.projects.some(p => p.name?.trim() && p.location?.trim())) score += 10;
+    if (formData.team.founderName?.trim()) score += 10;
+    return Math.min(100, score);
+  };
+
+  const validateForm = () => {
+    // Section 1: Basic Info
+    if (!formData.basicInfo.companyName?.trim()) {
+      alert("Please enter the Company Name in Section 1.");
+      setCurrentSection(1);
+      return false;
+    }
+    if (!formData.basicInfo.contactPerson?.trim()) {
+      alert("Please enter the Contact Person in Section 1.");
+      setCurrentSection(1);
+      return false;
+    }
+    if (!formData.basicInfo.mobileNumber?.trim()) {
+      alert("Please enter the Mobile Number in Section 1.");
+      setCurrentSection(1);
+      return false;
+    }
+    if (!formData.basicInfo.email?.trim()) {
+      alert("Please enter a valid Email Address in Section 1.");
+      setCurrentSection(1);
+      return false;
+    }
+
+    // Section 2: About Company
+    if (!formData.aboutCompany.services || formData.aboutCompany.services.length === 0) {
+      alert("Please select at least one Service You Provide in Section 2.");
+      setCurrentSection(2);
+      return false;
+    }
+
+    // Section 4: Featured Projects
+    if (formData.projects && formData.projects.length > 0) {
+      for (let i = 0; i < formData.projects.length; i++) {
+        const proj = formData.projects[i];
+        if (!proj.name?.trim()) {
+          alert(`Please enter the Project Name for Project #${i + 1} in Section 4.`);
+          setCurrentSection(4);
+          return false;
+        }
+        if (!proj.location?.trim()) {
+          alert(`Please enter the Location for Project #${i + 1} in Section 4.`);
+          setCurrentSection(4);
+          return false;
+        }
+      }
+    }
+
+    // Section 5: Team & Founder Details
+    if (!formData.team.founderName?.trim()) {
+      alert("Please enter the Founder / Principal Name in Section 5.");
+      setCurrentSection(5);
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent submission if required fields are missing across any section
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
+    setSubmitProgress(5);
+    setSubmitStepText('Preparing requirement summary & media files...');
 
     try {
       const targetUrl = driveWebhookUrl || import.meta.env.VITE_GOOGLE_DRIVE_WEBHOOK_URL;
+      console.log("🚀 Starting form submit. Webhook URL:", targetUrl);
+      
       if (targetUrl && targetUrl.trim().startsWith('http')) {
+        setSubmitStepText('Connecting to 5TB Google Drive Webhook...');
+        setSubmitProgress(15);
+
+        const payload = JSON.stringify(formData);
+        console.log(`Payload size: ${Math.round(payload.length / 1024)} KB. Sending via simple fetch...`);
+
+        // Simulated progress steps since upload listeners trigger CORS preflights
+        const progressInterval = setInterval(() => {
+          setSubmitProgress(prev => {
+            if (prev < 85) return prev + 5;
+            return prev;
+          });
+        }, 1000);
+
+        setSubmitProgress(30);
+        setSubmitStepText('Uploading response and files to Google Drive...');
+
         const response = await fetch(targetUrl.trim(), {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(formData)
+          body: payload
         });
-        const result = await response.json();
-        if (result.status === 'success' && result.folderUrl) {
-          setCreatedDriveFolderUrl(result.folderUrl);
+
+        clearInterval(progressInterval);
+        setSubmitProgress(95);
+        setSubmitStepText('Finalizing response in Google Drive...');
+
+        const responseText = await response.text();
+        console.log("Received response from Apps Script:", responseText);
+
+        try {
+          const result = JSON.parse(responseText);
+          if (result.status === 'success' && result.folderUrl) {
+            console.log("✅ Drive folder created successfully:", result.folderUrl);
+            setCreatedDriveFolderUrl(result.folderUrl);
+            try {
+              localStorage.setItem('nexloop_created_drive_folder_url', result.folderUrl);
+            } catch (e) {}
+          } else {
+            console.error("❌ Apps Script returned error status:", result.message);
+          }
+        } catch (parseErr) {
+          console.warn('Response parsing notice:', parseErr);
         }
+      } else {
+        console.error("❌ Google Drive Webhook URL is missing or invalid! Check your .env.local file. Target URL:", targetUrl);
       }
+      setSubmitProgress(100);
     } catch (err) {
-      console.warn('Google Drive submission notice:', err);
+      console.error('❌ Google Drive submission error:', err);
     } finally {
       setIsSubmitting(false);
       setIsSubmitted(true);
+      try {
+        localStorage.setItem('nexloop_form_submitted', 'true');
+      } catch (e) {}
       confetti({
         particleCount: 120,
         spread: 70,
@@ -318,55 +483,42 @@ export default function App() {
         onSaveDraft={handleManualSave}
         onResetDraft={handleResetDraft}
         lastSavedTime={lastSavedTime}
+        isSubmitted={isSubmitted}
       />
 
-      {/* 5TB Google Drive Configuration Button Bar */}
-      <div className="mb-4 text-right no-print">
-        <button
-          type="button"
-          onClick={() => setShowDriveConfig(!showDriveConfig)}
-          className="gf-btn-secondary text-xs px-3 py-1.5 inline-flex items-center gap-2"
-        >
-          <span>{driveWebhookUrl ? '5TB Google Drive Connected' : 'Connect 5TB Google Drive Storage'}</span>
-          <Settings className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-        </button>
+      {/* 7 Section Step Pills Navigation */}
+      {!isSubmitted && (
+        <div className="gf-step-pills no-print">
+          {SECTIONS.map((sec) => (
+            <button
+              key={sec.id}
+              onClick={() => setCurrentSection(sec.id)}
+              type="button"
+              className={`gf-step-pill ${currentSection === sec.id ? 'active' : ''}`}
+            >
+              {sec.title}
+            </button>
+          ))}
+        </div>
+      )}
 
-        {showDriveConfig && (
-          <div className="p-4 bg-white border border-purple-300 rounded-lg shadow-md text-left mt-2 space-y-2 text-xs">
-            <div className="font-semibold text-purple-900 flex items-center justify-between">
-              <span>Connect 5TB Google Drive Webhook URL</span>
-              <button onClick={() => setShowDriveConfig(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+      {/* Uploading Progress Modal */}
+      {isSubmitting && (
+        <div className="gf-modal-overlay">
+          <div className="gf-modal-card text-center py-8 px-6 max-w-sm space-y-4">
+            <Loader2 className="w-10 h-10 text-purple-600 animate-spin mx-auto" />
+            <h3 className="text-lg font-medium text-slate-900">Uploading to 5TB Google Drive</h3>
+            <p className="text-xs text-slate-500">{submitStepText}</p>
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+              <div
+                className="bg-purple-600 h-full transition-all duration-300 ease-out"
+                style={{ width: `${submitProgress}%` }}
+              />
             </div>
-            <p className="text-slate-600">
-              Set <code>VITE_GOOGLE_DRIVE_WEBHOOK_URL</code> in <code>.env.local</code> or paste your Google Apps Script Web App URL below:
-            </p>
-            <input
-              type="url"
-              value={driveWebhookUrl}
-              onChange={(e) => setDriveWebhookUrl(e.target.value)}
-              placeholder="https://script.google.com/macros/s/.../exec"
-              className="gf-underline-input w-full text-xs font-mono"
-            />
-            <div className="text-[11px] text-slate-500">
-              * Environment file created at <code>c:\Form\.env.local</code>
-            </div>
+            <div className="text-xs font-semibold text-purple-700">{submitProgress}%</div>
           </div>
-        )}
-      </div>
-
-      {/* Section Step Pills Navigation */}
-      <div className="gf-step-pills no-print">
-        {SECTIONS.map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => setCurrentSection(sec.id)}
-            type="button"
-            className={`gf-step-pill ${currentSection === sec.id ? 'active' : ''}`}
-          >
-            {sec.title}
-          </button>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Confirmation View */}
       {isSubmitted ? (
@@ -381,23 +533,6 @@ export default function App() {
             Thank you for filling out the NexLoop Portfolio Website Requirement Form.
           </p>
 
-          {createdDriveFolderUrl && (
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg max-w-md mx-auto my-3 text-xs text-purple-900 space-y-2">
-              <div className="font-semibold flex items-center justify-center gap-1.5 text-purple-800">
-                <HardDrive className="w-4 h-4 text-purple-700" />
-                Response Folder Created in 5TB Google Drive
-              </div>
-              <a
-                href={createdDriveFolderUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="gf-btn-primary text-xs inline-flex items-center gap-1.5 py-1.5 px-3"
-              >
-                Open Client Folder in Google Drive <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          )}
-
           <div className="flex items-center justify-center gap-3 pt-4">
             <button
               onClick={() => setShowReviewModal(true)}
@@ -406,7 +541,12 @@ export default function App() {
               View / Download Response
             </button>
             <button
-              onClick={() => setIsSubmitted(false)}
+              onClick={() => {
+                setIsSubmitted(false);
+                try {
+                  localStorage.setItem('nexloop_form_submitted', 'false');
+                } catch (e) {}
+              }}
               className="gf-btn-secondary text-xs"
             >
               Edit response
@@ -421,7 +561,7 @@ export default function App() {
           {currentSection === 1 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 1 of 9: 1. Basic Information</h2>
+                <h2>Section 1 of 7: 1. Basic Information</h2>
                 <p>Please enter your company contact details.</p>
               </div>
 
@@ -508,8 +648,8 @@ export default function App() {
           {currentSection === 2 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 2 of 9: 2. About Your Company</h2>
-                <p>Tell us about your company.</p>
+                <h2>Section 2 of 7: 2. About Your Company</h2>
+                <p>Tell us about your company overview, history and services.</p>
               </div>
 
               <div className="gf-q-card">
@@ -572,7 +712,7 @@ export default function App() {
           {currentSection === 3 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 3 of 9: 3. Website Requirements</h2>
+                <h2>Section 3 of 7: 3. Website Requirements</h2>
                 <p>Select the pages and features you want on your website.</p>
               </div>
 
@@ -647,44 +787,83 @@ export default function App() {
               onProjectCountChoiceChange={(val) => setFormData(prev => ({ ...prev, projectCountChoice: val }))}
               projects={formData.projects}
               onProjectsChange={(updatedProjects) => setFormData(prev => ({ ...prev, projects: updatedProjects }))}
+              driveWebhookUrl={driveWebhookUrl}
             />
           )}
 
-          {/* SECTION 5: Team */}
+          {/* SECTION 5: Team & Founder Information */}
           {currentSection === 5 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 5 of 9: 5. Team</h2>
+                <h2>Section 5 of 7: 5. Team & Founder Details</h2>
+                <p>Provide details about the founder, leadership, and key team members.</p>
               </div>
 
               <div className="gf-q-card">
-                <div className="gf-q-title">Founder Name</div>
+                <div className="gf-q-title">
+                  Founder / Principal Name <span className="required-star">*</span>
+                </div>
                 <input
                   type="text"
+                  required
                   value={formData.team.founderName}
                   onChange={(e) => updateNestedField('team', 'founderName', e.target.value)}
-                  placeholder="e.g. Ar. Vikramaditya Rao (Principal Architect & Founder)"
+                  placeholder="e.g. Ar. Vikramaditya Rao"
                   className="gf-underline-input"
                 />
               </div>
 
               <div className="gf-q-card">
-                <div className="gf-q-title">Team Members (Optional)</div>
+                <div className="gf-q-title">Founder Designation / Title</div>
+                <input
+                  type="text"
+                  value={formData.team.founderDesignation || ''}
+                  onChange={(e) => updateNestedField('team', 'founderDesignation', e.target.value)}
+                  placeholder="e.g. Principal Architect & Managing Director"
+                  className="gf-underline-input"
+                />
+              </div>
+
+              <div className="gf-q-card">
+                <div className="gf-q-title">Founder Bio / Achievements / Story</div>
+                <textarea
+                  value={formData.team.founderBio || ''}
+                  onChange={(e) => updateNestedField('team', 'founderBio', e.target.value)}
+                  placeholder="e.g. Ar. Vikramaditya Rao holds a Master's in Architectural Design from SPA Delhi. Over 18 years, he has spearheaded 200+ landmark luxury projects and received IIA Design Excellence Award..."
+                  className="gf-textarea"
+                />
+              </div>
+
+              <div className="gf-q-card">
+                <MediaUploadZone
+                  label="Upload Founder Headshot / Portrait Photo"
+                  accept="image/*"
+                  multiple={false}
+                  files={formData.team.founderPhoto || []}
+                  onFilesChange={(filesList) => updateNestedField('team', 'founderPhoto', filesList)}
+                  helpText="Attach professional high-resolution photo of the founder."
+                  webhookUrl={driveWebhookUrl}
+                />
+              </div>
+
+              <div className="gf-q-card">
+                <div className="gf-q-title">Key Team Members & Bios</div>
                 <textarea
                   value={formData.team.teamMembers}
                   onChange={(e) => updateNestedField('team', 'teamMembers', e.target.value)}
-                  placeholder="e.g. Ar. Neha Verma (Senior Interior Designer), Eng. Suresh Patil (Chief Structural Engineer)"
+                  placeholder="e.g. Ar. Neha Verma (Chief Interior Designer - 10 yrs exp), Eng. Suresh Patil (Structural Engineering Lead - 14 yrs exp)"
                   className="gf-textarea"
                 />
               </div>
             </div>
           )}
 
-          {/* SECTION 6: Branding */}
+          {/* SECTION 6: Branding & Assets */}
           {currentSection === 6 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 6 of 9: 6. Branding</h2>
+                <h2>Section 6 of 7: 6. Branding & Assets</h2>
+                <p>Upload brand logos, PDFs, brochure and general media files.</p>
               </div>
 
               <div className="gf-q-card">
@@ -695,6 +874,7 @@ export default function App() {
                   files={formData.branding.logo}
                   onFilesChange={(filesList) => updateNestedField('branding', 'logo', filesList)}
                   helpText="Attach transparent PNG or SVG logo."
+                  webhookUrl={driveWebhookUrl}
                 />
               </div>
 
@@ -706,6 +886,7 @@ export default function App() {
                   files={formData.branding.profilePdf}
                   onFilesChange={(filesList) => updateNestedField('branding', 'profilePdf', filesList)}
                   helpText="Attach company profile PDF document."
+                  webhookUrl={driveWebhookUrl}
                 />
               </div>
 
@@ -717,37 +898,30 @@ export default function App() {
                   files={formData.branding.brochurePdf}
                   onFilesChange={(filesList) => updateNestedField('branding', 'brochurePdf', filesList)}
                   helpText="Attach company brochure PDF."
+                  webhookUrl={driveWebhookUrl}
                 />
-              </div>
-            </div>
-          )}
-
-          {/* SECTION 7: Assets */}
-          {currentSection === 7 && (
-            <div className="space-y-3">
-              <div className="gf-section-header">
-                <h2>Section 7 of 9: 7. Assets</h2>
-                <p>Upload if available: Project Photos, Team Photos, Office Photos, Client Testimonials, Certificates.</p>
               </div>
 
               <div className="gf-q-card">
                 <MediaUploadZone
-                  label="Asset Files & Photos"
+                  label="General Assets, Testimonials & Office Photos"
                   files={formData.assets.files}
                   onFilesChange={(filesList) => updateNestedField('assets', 'files', filesList)}
                   driveLink={formData.assets.driveLink}
                   onDriveLinkChange={(url) => updateNestedField('assets', 'driveLink', url)}
-                  helpText="Upload media files or provide Google Drive folder link below."
+                  helpText="Upload additional media files or provide Google Drive folder link below."
+                  webhookUrl={driveWebhookUrl}
                 />
               </div>
             </div>
           )}
 
-          {/* SECTION 8: Contact Details */}
-          {currentSection === 8 && (
+          {/* SECTION 7: Contact & Additional Notes */}
+          {currentSection === 7 && (
             <div className="space-y-3">
               <div className="gf-section-header">
-                <h2>Section 8 of 9: 8. Contact Details</h2>
+                <h2>Section 7 of 7: 7. Contact Details & Additional Notes</h2>
+                <p>Enter contact channels, social handles and special design requests.</p>
               </div>
 
               <div className="gf-q-card">
@@ -784,53 +958,38 @@ export default function App() {
               </div>
 
               <div className="gf-q-card">
-                <div className="gf-q-title">Facebook</div>
-                <input
-                  type="text"
-                  value={formData.contactDetails.facebook}
-                  onChange={(e) => updateNestedField('contactDetails', 'facebook', e.target.value)}
-                  placeholder="e.g. https://facebook.com/apexarchitects"
-                  className="gf-underline-input"
-                />
+                <div className="gf-q-title">Social Links (Instagram / LinkedIn / Facebook)</div>
+                <div className="space-y-2 mt-2">
+                  <input
+                    type="text"
+                    value={formData.contactDetails.instagram}
+                    onChange={(e) => updateNestedField('contactDetails', 'instagram', e.target.value)}
+                    placeholder="Instagram: https://instagram.com/apex.architects"
+                    className="gf-underline-input"
+                  />
+                  <input
+                    type="text"
+                    value={formData.contactDetails.linkedin}
+                    onChange={(e) => updateNestedField('contactDetails', 'linkedin', e.target.value)}
+                    placeholder="LinkedIn: https://linkedin.com/company/apex-architects"
+                    className="gf-underline-input"
+                  />
+                  <input
+                    type="text"
+                    value={formData.contactDetails.facebook}
+                    onChange={(e) => updateNestedField('contactDetails', 'facebook', e.target.value)}
+                    placeholder="Facebook: https://facebook.com/apexarchitects"
+                    className="gf-underline-input"
+                  />
+                </div>
               </div>
 
               <div className="gf-q-card">
-                <div className="gf-q-title">Instagram</div>
-                <input
-                  type="text"
-                  value={formData.contactDetails.instagram}
-                  onChange={(e) => updateNestedField('contactDetails', 'instagram', e.target.value)}
-                  placeholder="e.g. https://instagram.com/apex.architects"
-                  className="gf-underline-input"
-                />
-              </div>
-
-              <div className="gf-q-card">
-                <div className="gf-q-title">LinkedIn</div>
-                <input
-                  type="text"
-                  value={formData.contactDetails.linkedin}
-                  onChange={(e) => updateNestedField('contactDetails', 'linkedin', e.target.value)}
-                  placeholder="e.g. https://linkedin.com/company/apex-architects"
-                  className="gf-underline-input"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* SECTION 9: Anything Else? */}
-          {currentSection === 9 && (
-            <div className="space-y-3">
-              <div className="gf-section-header">
-                <h2>Section 9 of 9: 9. Anything Else?</h2>
-              </div>
-
-              <div className="gf-q-card">
-                <div className="gf-q-title">Additional Comments / Notes</div>
+                <div className="gf-q-title">Anything Else? (Additional Comments & Preferences)</div>
                 <textarea
                   value={formData.anythingElse}
                   onChange={(e) => setFormData(prev => ({ ...prev, anythingElse: e.target.value }))}
-                  placeholder="e.g. Prefer clean dark/gold color palette for the website. Please include a 3D model viewer on the projects showcase page."
+                  placeholder="e.g. Prefer clean dark/gold color palette for the website. Please include an interactive 3D villa walkthrough section."
                   className="gf-textarea"
                   rows={4}
                 />
@@ -838,16 +997,38 @@ export default function App() {
             </div>
           )}
 
-          {/* Navigation Controls Footer */}
-          <div className="gf-footer-nav">
-            <div className="flex items-center gap-2">
+          {/* Navigation Controls Footer - Plain Inline Flex Styles with explicit gap */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            marginTop: '32px',
+            marginBottom: '40px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               {currentSection > 1 && (
                 <button
                   type="button"
                   onClick={() => setCurrentSection(prev => Math.max(1, prev - 1))}
-                  className="gf-btn-secondary text-xs"
+                  style={{
+                    height: '38px',
+                    padding: '0 20px',
+                    backgroundColor: '#ffffff',
+                    color: '#673ab7',
+                    border: '1px solid #dadce0',
+                    borderRadius: '4px',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
                 >
-                  <ChevronLeft className="w-4 h-4" /> Back
+                  <ChevronLeft style={{ width: '16px', height: '16px' }} />
+                  <span>Back</span>
                 </button>
               )}
 
@@ -855,35 +1036,96 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setCurrentSection(prev => Math.min(SECTIONS.length, prev + 1))}
-                  className="gf-btn-primary text-xs"
+                  style={{
+                    height: '38px',
+                    padding: '0 24px',
+                    backgroundColor: '#673ab7',
+                    color: '#ffffff',
+                    border: '1px solid #673ab7',
+                    borderRadius: '4px',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.15)'
+                  }}
                 >
-                  Next <ChevronRight className="w-4 h-4" />
+                  <span>Next</span>
+                  <ChevronRight style={{ width: '16px', height: '16px' }} />
                 </button>
               ) : (
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="gf-btn-primary text-xs"
+                  style={{
+                    height: '38px',
+                    padding: '0 24px',
+                    backgroundColor: '#673ab7',
+                    color: '#ffffff',
+                    border: '1px solid #673ab7',
+                    borderRadius: '4px',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.15)'
+                  }}
                 >
-                  <Send className="w-4 h-4" /> {isSubmitting ? 'Uploading to 5TB Drive...' : 'Submit'}
+                  <Send style={{ width: '16px', height: '16px' }} />
+                  <span>Submit</span>
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <button
                 type="button"
                 onClick={() => setShowReviewModal(true)}
-                className="gf-btn-secondary text-xs"
+                style={{
+                  height: '38px',
+                  padding: '0 18px',
+                  backgroundColor: '#ffffff',
+                  color: '#673ab7',
+                  border: '1px solid #dadce0',
+                  borderRadius: '4px',
+                  fontWeight: 500,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
               >
-                <Eye className="w-3.5 h-3.5" /> Review
+                <Eye style={{ width: '16px', height: '16px' }} />
+                <span>Review</span>
               </button>
               <button
                 type="button"
                 onClick={handleResetDraft}
-                className="gf-btn-text text-slate-500 hover:text-slate-700 text-xs"
+                style={{
+                  height: '38px',
+                  padding: '0 14px',
+                  backgroundColor: 'transparent',
+                  color: '#d93025',
+                  border: 'none',
+                  fontWeight: 500,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Clear form
+                <RotateCcw style={{ width: '16px', height: '16px' }} />
+                <span>Clear form</span>
               </button>
             </div>
           </div>

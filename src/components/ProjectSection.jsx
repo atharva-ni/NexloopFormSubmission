@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, X, Info } from 'lucide-react';
 import { MediaUploadZone } from './MediaUploadZone';
 
 const PROJECT_TYPES = [
@@ -15,7 +15,8 @@ export function ProjectSection({
   projectCountChoice,
   onProjectCountChoiceChange,
   projects,
-  onProjectsChange
+  onProjectsChange,
+  driveWebhookUrl = ""
 }) {
   const [activeProjectTab, setActiveProjectTab] = useState(0);
 
@@ -120,19 +121,21 @@ export function ProjectSection({
       </div>
 
       {/* Project Selector Tab Bar */}
-      <div className="gf-card">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-slate-500">Select Project to Edit:</span>
-          <button
-            type="button"
-            onClick={addSingleProject}
-            className="gf-btn-text text-xs flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Project
-          </button>
+      <div className="gf-q-card">
+        <div className="gf-q-title mb-2">
+          Select Project to Edit ({activeProjectTab + 1} of {projects.length})
         </div>
 
-        <div className="gf-tab-bar mb-0">
+        {/* Visual Instruction Callout Box */}
+        <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-950 mb-3.5 flex items-start gap-2">
+          <Info className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <span className="font-semibold text-purple-900">Important Instruction: </span> 
+            Please click on each project tab below (e.g. <b>Project 1</b>, <b>Project 2</b>, etc.) to enter details and upload photos for every project.
+          </div>
+        </div>
+
+        <div className="gf-tab-bar mb-0 border-b-0 pb-0">
           {projects.map((proj, idx) => {
             const isActive = activeProjectTab === idx;
             return (
@@ -146,14 +149,25 @@ export function ProjectSection({
                   <button
                     type="button"
                     onClick={(e) => removeProjectTab(idx, e)}
-                    className="ml-1.5 text-slate-400 hover:text-rose-600"
+                    className="gf-tab-close-btn"
+                    title="Remove project"
                   >
-                    ✕
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
             );
           })}
+
+          {/* Add Project Inline Tab Button */}
+          <button
+            type="button"
+            onClick={addSingleProject}
+            className="gf-tab bg-white border border-purple-300 text-purple-700 hover:bg-purple-50"
+          >
+            <Plus className="w-4 h-4 text-purple-700" />
+            <span>Add Project</span>
+          </button>
         </div>
       </div>
 
@@ -283,6 +297,7 @@ export function ProjectSection({
           driveLink={currentProject.driveLink || ''}
           onDriveLinkChange={(url) => updateCurrentProjectField('driveLink', url)}
           helpText="Upload site photos, renders, videos or paste Google Drive folder link below."
+          webhookUrl={driveWebhookUrl}
         />
       </div>
     </div>
