@@ -95,7 +95,7 @@ export function ProjectSection({
     <div className="space-y-3">
       {/* Section 4 Header Banner Card */}
       <div className="gf-section-header">
-        <h2>Section 4 of 9: 4. Featured Projects</h2>
+        <h2>Section 4 of 7: 4. Featured Projects</h2>
         <p>Specify details for each project you wish to showcase.</p>
       </div>
 

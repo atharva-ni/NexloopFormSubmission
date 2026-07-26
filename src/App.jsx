@@ -1027,6 +1027,7 @@ export default function App() {
 
               {currentSection < SECTIONS.length ? (
                 <button
+                  key="next-btn"
                   type="button"
                   onClick={() => setCurrentSection(prev => Math.min(SECTIONS.length, prev + 1))}
                   style={{
@@ -1051,6 +1052,7 @@ export default function App() {
                 </button>
               ) : (
                 <button
+                  key="submit-btn"
                   type="submit"
                   disabled={isSubmitting}
                   style={{
