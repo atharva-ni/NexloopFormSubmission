@@ -99,18 +99,31 @@ function doPost(e) {
 function saveFilesToFolder(filesArray, folder) {
   if (!filesArray || !Array.isArray(filesArray)) return;
   filesArray.forEach(function(fileObj) {
-    if (fileObj.base64) {
+    if (fileObj && fileObj.base64) {
       let base64String = fileObj.base64;
       let contentType = "application/octet-stream";
       
+      // Extract MIME type if data URL header is present
       if (base64String.indexOf(",") !== -1) {
         const parts = base64String.split(",");
-        contentType = parts[0].split(";")[0].replace("data:", "");
+        const headerMime = parts[0].split(";")[0].replace("data:", "");
+        if (headerMime) contentType = headerMime;
         base64String = parts[1];
       }
       
-      const decodedData = Utilities.base64Decode(base64String);
-      const blob = Utilities.newBlob(decodedData, contentType, fileObj.name);
+      // Fallback MIME types by file extension
+      const fileName = fileObj.name || "file";
+      const ext = fileName.split('.').pop().toLowerCase();
+      if (ext === 'mp4') contentType = 'video/mp4';
+      else if (ext === 'mov') contentType = 'video/quicktime';
+      else if (ext === 'webm') contentType = 'video/webm';
+      else if (ext === 'png') contentType = 'image/png';
+      else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+      else if (ext === 'svg') contentType = 'image/svg+xml';
+      else if (ext === 'pdf') contentType = 'application/pdf';
+      
+      const bytes = Utilities.base64Decode(base64String);
+      const blob = Utilities.newBlob(bytes, contentType, fileName);
       folder.createFile(blob);
     }
   });

@@ -164,7 +164,11 @@ const INITIAL_STATE = {
 };
 
 export default function App() {
-  const [currentSection, setCurrentSection] = useState(1);
+  const [currentSection, setCurrentSection] = useState(() => {
+    const savedSec = localStorage.getItem('nexloop_current_section');
+    return savedSec ? parseInt(savedSec, 10) : 1;
+  });
+
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('nexloop_form_draft');
     if (saved) {
@@ -190,11 +194,17 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showDriveConfig, setShowDriveConfig] = useState(false);
 
+  // Auto-save form data state on every single change
   useEffect(() => {
     localStorage.setItem('nexloop_form_draft', JSON.stringify(formData));
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setLastSavedTime(now);
   }, [formData]);
+
+  // Persist current active section step
+  useEffect(() => {
+    localStorage.setItem('nexloop_current_section', currentSection.toString());
+  }, [currentSection]);
 
   useEffect(() => {
     if (driveWebhookUrl) {
@@ -204,15 +214,17 @@ export default function App() {
 
   const handleManualSave = () => {
     localStorage.setItem('nexloop_form_draft', JSON.stringify(formData));
+    localStorage.setItem('nexloop_current_section', currentSection.toString());
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setLastSavedTime(now);
-    alert('Form draft saved!');
+    alert('Form state saved successfully!');
   };
 
   const handleResetDraft = () => {
-    if (window.confirm('Are you sure you want to clear all form entries?')) {
+    if (window.confirm('Are you sure you want to clear all form entries and reset state?')) {
       setFormData(INITIAL_STATE);
       localStorage.removeItem('nexloop_form_draft');
+      localStorage.removeItem('nexloop_current_section');
       setCurrentSection(1);
       setIsSubmitted(false);
       setCreatedDriveFolderUrl(null);
