@@ -1,8 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 
-// Valid 200x200 Red PNG Image
-const realPngBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAAZSURBVHic3EExAQAAAMKg9U9tDQ8gAAAAAAC+BhuAAAE49Q3cAAAAAElFTkSuQmCC";
+// Download a REAL 1080p HD Photo (Nature / Architecture sample)
+async function getRealHdPhotoBase64() {
+  try {
+    const photoUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000&auto=format&fit=crop";
+    console.log("Fetching real 1080p HD Architecture photo...");
+    const res = await fetch(photoUrl);
+    if (res.ok) {
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      console.log(`Fetched real HD photo (${(buffer.length / 1024).toFixed(1)} KB)`);
+      return `data:image/jpeg;base64,${buffer.toString('base64')}`;
+    }
+  } catch (err) {
+    console.warn("Error fetching HD photo:", err.message);
+  }
+  return null;
+}
 
 // Download a 1MB real playable MP4 video sample
 async function getRealMp4Base64() {
@@ -23,19 +38,19 @@ async function getRealMp4Base64() {
 }
 
 async function runRealMediaTest() {
-  console.log("=== Testing 100% REAL Playable Image & Video Upload ===");
+  console.log("=== Testing 100% REAL HD Photo & Playable Video Upload ===");
   
-  const realPng = realPngBase64;
+  const realHdPhoto = await getRealHdPhotoBase64();
   const realMp4 = await getRealMp4Base64();
 
-  if (!realMp4) {
-    console.error("Could not fetch sample video.");
+  if (!realHdPhoto || !realMp4) {
+    console.error("Could not fetch media samples.");
     return;
   }
 
   const testPayload = {
     basicInfo: {
-      companyName: "NexLoop Real Playable Video Firm",
+      companyName: "NexLoop HD Quality Test Firm",
       contactPerson: "Ar. Atharva",
       mobileNumber: "+91 98765 43210",
       whatsAppNumber: "+91 98765 43210",
@@ -43,7 +58,7 @@ async function runRealMediaTest() {
       officeAddress: "Mumbai, India"
     },
     aboutCompany: {
-      description: "Testing real playable MP4 video and high-res PNG image uploads.",
+      description: "Testing real 1080p HD photo and playable MP4 video without quality loss.",
       yearsExperience: "10 Years",
       services: ["Architecture", "Interior Design"],
       otherService: ""
@@ -58,25 +73,25 @@ async function runRealMediaTest() {
     projects: [
       {
         id: "proj-1",
-        name: "Playable Video Villa",
+        name: "Luxury Beach Villa HD",
         location: "Goa, India",
         type: "Villa",
         customType: "",
         status: "Completed",
         yearCompleted: "2024",
-        description: "Full resolution photos and playable walkthrough MP4 video.",
+        description: "100% full original quality photo and playable MP4 video.",
         servicesProvided: "Architectural Planning",
         photos: [
           {
-            name: "real_villa_photo_hd.png",
+            name: "luxury_villa_1080p_hd.jpg",
             type: "image",
-            size: "0.50 MB",
-            base64: realPng
+            size: "1.20 MB",
+            base64: realHdPhoto
           },
           {
-            name: "playable_walkthrough.mp4",
+            name: "walkthrough_video_hd.mp4",
             type: "video",
-            size: "1.10 MB",
+            size: "0.56 MB",
             base64: realMp4
           }
         ],
@@ -87,7 +102,7 @@ async function runRealMediaTest() {
     branding: { logo: [], profilePdf: [], brochurePdf: [] },
     assets: { files: [], driveLink: "" },
     contactDetails: { phone: "+91 98765 43210", email: "info@nexloop.com", googleMaps: "", facebook: "", instagram: "", linkedin: "" },
-    anythingElse: "Testing real playable MP4 video."
+    anythingElse: "Testing 100% full HD photo and video."
   };
 
   const envPath = path.join(process.cwd(), '.env.local');
@@ -101,7 +116,7 @@ async function runRealMediaTest() {
   }
 
   if (webhookUrl) {
-    console.log("Uploading 1MB real playable image & video to Google Drive Webhook...");
+    console.log("Uploading 1080p HD Photo & Playable Video to Google Drive Webhook...");
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
